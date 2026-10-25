@@ -1,0 +1,70 @@
+{
+  "name": "cursor-sound-toggle",
+  "displayName": "Cursor Sound Toggle",
+  "description": "Status bar toggle, sound picker with live preview, and a command to play a sound when a task is done.",
+  "version": "0.2.1",
+  "publisher": "idmtr",
+  "license": "MIT",
+  "keywords": ["sound", "notification", "task done", "status bar", "cursor"],
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "cursor-sound-toggle.toggle",
+        "title": "Toggle Done Sound",
+        "category": "Cursor Sound"
+      },
+      {
+        "command": "cursor-sound-toggle.chooseSound",
+        "title": "Choose Done Sound…",
+        "category": "Cursor Sound"
+      },
+      {
+        "command": "cursor-sound-toggle.play",
+        "title": "Play Done Sound (if enabled)",
+        "category": "Cursor Sound"
+      },
+      {
+        "command": "cursor-sound-toggle.test",
+        "title": "Test Done Sound",
+        "category": "Cursor Sound"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "cursor-sound-toggle.toggle",
+        "key": "ctrl+alt+m"
+      },
+      {
+        "command": "cursor-sound-toggle.chooseSound",
+        "key": "ctrl+alt+shift+m"
+      }
+    ],
+    "configuration": {
+      "title": "Cursor Sound Toggle",
+      "properties": {
+        "cursorSoundToggle.volume": {
+          "type": "number",
+          "default": 100,
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Playback volume (0-100). Not applied on Windows."
+        },
+        "cursorSoundToggle.soundFile": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Absolute path to the sound to play. Leave empty for the platform default. Easiest to set with **Cursor Sound: Choose Done Sound…**."
+        }
+      }
+    }
+  }
+}
