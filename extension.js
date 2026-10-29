@@ -42,7 +42,7 @@ let extContext;
 let quietTimer;
 let statusBarItem;
 let lastPlayedAt = 0;
-let lastAnnounceAt = 0;
+const lastAnnounceAt = new Map(); // debounce slot -> epoch ms
 let currentPlayback;
 let output;
 
@@ -207,25 +207,69 @@ function activate(context) {
 
 // --- Cursor stop hook installer --------------------------------------------------------
 
-/** Shell command that opens our URI without stealing focus where the OS allows it. */
-function hookCommand(context) {
-    const url = `${vscode.env.uriScheme}://${context.extension.id}/done?event=agent`;
-    if (process.platform === 'darwin') {
-        return `open -g '${url}'`;
-    }
+/**
+ * Cursor hooks we install. `event` is the name sent to the URI handler (the key in the `events`
+ * setting). `status` is read from Cursor's JSON on stdin (completed/error/aborted); `fixedStatus`
+ * is used when the hook itself implies one.
+ */
+const HOOKS = [
+    { hook: 'stop', event: 'agent', readStatus: true },
+    { hook: 'subagentStop', event: 'subagent', readStatus: true },
+    { hook: 'postToolUseFailure', event: 'tool', fixedStatus: 'failed' }
+];
+const HOOK_SCRIPT = 'cursor-sound-toggle-hook.sh';
+
+// Hook-driven events that stay silent until you give them an entry in the `events` setting,
+// because they can fire many times per agent run.
+const OPT_IN_EVENTS = new Set(['subagent', 'tool']);
+
+function hookScriptPath() {
+    return path.join(os.homedir(), '.cursor', HOOK_SCRIPT);
+}
+
+/** POSIX helper that reads Cursor's hook JSON from stdin and opens our URI (macOS/Linux). */
+function hookScript(context) {
+    const opener = process.platform === 'darwin' ? 'open -g' : 'xdg-open';
+    const base = `${vscode.env.uriScheme}://${context.extension.id}/done`;
+    return [
+        '#!/bin/sh',
+        '# Managed by Cursor Sound Toggle (Install Cursor Hooks). Safe to delete; the command re-creates it.',
+        'event="$1"',
+        'input=$(cat)',
+        'status=""',
+        'case "$event" in',
+        '  tool)',
+        '    case "$input" in',
+        '      *\'"is_interrupt":true\'*|*\'"is_interrupt": true\'*) exit 0 ;;', // user cancel, not a failure
+        '    esac',
+        '    status=failed ;;',
+        '  *)',
+        '    status=$(printf \'%s\' "$input" | sed -nE \'s/.*"status"[[:space:]]*:[[:space:]]*"(completed|error|aborted)".*/\\1/p\' | head -n 1) ;;',
+        'esac',
+        `${opener} "${base}?event=$event&status=\${status:-completed}"`,
+        ''
+    ].join('\n');
+}
+
+/** The hooks.json `command` for one hook. Windows has no stdin parsing, so no status there. */
+function hookCommand(context, spec) {
     if (process.platform === 'win32') {
-        return `cmd /c start "" "${url}"`;
+        const status = spec.fixedStatus ? `&status=${spec.fixedStatus}` : '';
+        return `cmd /c start "" "${vscode.env.uriScheme}://${context.extension.id}/done?event=${spec.event}${status}"`;
     }
-    return `xdg-open '${url}'`;
+    return `'${hookScriptPath().replace(/'/g, `'\\''`)}' ${spec.event}`;
 }
 
 /**
- * Adds our `stop` hook to ~/.cursor/hooks.json, keeping every other hook and key.
+ * Adds our hooks (agent done, sub-agent done, tool failed) to ~/.cursor/hooks.json, keeping every
+ * other hook and key. Re-running upgrades our own entries in place, never duplicates them.
  * Never overwrites a file it cannot parse.
  */
 async function installHook(context) {
     const file = path.join(os.homedir(), '.cursor', 'hooks.json');
     const marker = `${context.extension.id}/done`;
+    const isOurs = (h) =>
+        h && typeof h.command === 'string' && (h.command.includes(marker) || h.command.includes(HOOK_SCRIPT));
     const OPEN = 'Open hooks.json';
     const offerOpen = (message, fn = 'showInformationMessage') =>
         vscode.window[fn](message, OPEN).then(
@@ -242,8 +286,10 @@ async function installHook(context) {
             if (data.hooks !== undefined && (typeof data.hooks !== 'object' || data.hooks === null || Array.isArray(data.hooks))) {
                 throw new Error('"hooks" is not an object');
             }
-            if (data.hooks && data.hooks.stop !== undefined && !Array.isArray(data.hooks.stop)) {
-                throw new Error('"hooks.stop" is not an array');
+            for (const { hook } of HOOKS) {
+                if (data.hooks && data.hooks[hook] !== undefined && !Array.isArray(data.hooks[hook])) {
+                    throw new Error(`"hooks.${hook}" is not an array`);
+                }
             }
         } catch (err) {
             log(`Could not read ${file}: ${err.message}`);
@@ -254,23 +300,45 @@ async function installHook(context) {
 
     data.version = data.version || 1;
     data.hooks = data.hooks || {};
-    data.hooks.stop = data.hooks.stop || [];
-    if (data.hooks.stop.some((h) => h && typeof h.command === 'string' && h.command.includes(marker))) {
-        offerOpen('Cursor Sound Toggle: the stop hook is already installed.');
+    const before = JSON.stringify(data);
+    for (const spec of HOOKS) {
+        const list = (data.hooks[spec.hook] = data.hooks[spec.hook] || []);
+        const first = list.findIndex(isOurs);
+        const entry = { ...(first >= 0 ? list[first] : {}), command: hookCommand(context, spec), timeout: 5 };
+        const others = list.filter((h) => !isOurs(h)); // also drops any duplicate copies of ours
+        if (first >= 0) {
+            others.splice(Math.min(first, others.length), 0, entry);
+        } else {
+            others.push(entry);
+        }
+        data.hooks[spec.hook] = others;
+    }
+    const scriptCurrent =
+        process.platform === 'win32' ||
+        (fs.existsSync(hookScriptPath()) && fs.readFileSync(hookScriptPath(), 'utf8') === hookScript(context));
+    if (JSON.stringify(data) === before && scriptCurrent) {
+        offerOpen('Cursor Sound Toggle: the hooks are already installed.');
         return;
     }
 
-    data.hooks.stop.push({ command: hookCommand(context), timeout: 5 });
     try {
+        if (process.platform !== 'win32') {
+            fs.mkdirSync(path.dirname(hookScriptPath()), { recursive: true });
+            fs.writeFileSync(hookScriptPath(), hookScript(context), { mode: 0o755 });
+            fs.chmodSync(hookScriptPath(), 0o755);
+        }
         fs.mkdirSync(path.dirname(file), { recursive: true });
         fs.writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`);
     } catch (err) {
-        log(`Could not write ${file}: ${err.message}`);
-        vscode.window.showErrorMessage(`Cursor Sound Toggle: could not write hooks.json (${err.message}).`);
+        log(`Could not write hooks: ${err.message}`);
+        vscode.window.showErrorMessage(`Cursor Sound Toggle: could not write the hooks (${err.message}).`);
         return;
     }
-    log(`Installed stop hook in ${file}`);
-    offerOpen('Cursor Sound Toggle: stop hook installed. Cursor reloads hooks.json on save; restart Cursor if it does not fire.');
+    log(`Installed hooks (${HOOKS.map((h) => h.hook).join(', ')}) in ${file}`);
+    offerOpen(
+        'Cursor Sound Toggle: hooks installed (agent done, sub-agent done, tool failed). Sub-agent and tool sounds stay silent ' +
+            'until you add them to cursorSoundToggle.events. Cursor reloads hooks.json on save; restart Cursor if it does not fire.'
+    );
 }
 
 // --- Quiet hours & snooze --------------------------------------------------------------
@@ -444,9 +512,12 @@ function handleDoneUri(uri) {
     }
     const q = new URLSearchParams(uri.query);
     const seconds = q.has('duration') ? Number(q.get('duration')) : NaN;
+    // Cursor's hook statuses (completed/error/aborted) map onto our succeeded/failed/aborted keys.
+    const HOOK_STATUS = { completed: 'succeeded', error: 'failed' };
+    const rawStatus = SAFE_WORD.test(q.get('status') || '') ? q.get('status') : 'finished';
     announce({
         event: SAFE_WORD.test(q.get('event') || '') ? q.get('event') : 'agent',
-        status: SAFE_WORD.test(q.get('status') || '') ? q.get('status') : 'finished',
+        status: HOOK_STATUS[rawStatus] || rawStatus,
         durationMs: Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : undefined
     });
 }
@@ -461,6 +532,9 @@ async function announce(info = {}, { force = false } = {}) {
         if (!isSoundEnabled() || override.enabled === false) {
             return;
         }
+        if (OPT_IN_EVENTS.has(info.event) && Object.keys(override).length === 0) {
+            return; // sub-agent / tool-failure sounds only play once configured in `events`
+        }
         const minMs = Math.max(0, Number(config().get('minDurationSeconds', 0)) || 0) * 1000;
         if (info.durationMs !== undefined && info.durationMs < minMs) {
             return;
@@ -468,9 +542,13 @@ async function announce(info = {}, { force = false } = {}) {
         if (config().get('onlyWhenUnfocused', false) && vscode.window.state.focused) {
             return;
         }
-        if (Date.now() - lastAnnounceAt < MIN_REPLAY_MS) {
-            return; // e.g. a task and its terminal both ending at once
+        // Debounce per source: a task and its terminal ending together share one slot ('local'),
+        // while a sub-agent finishing next to the agent itself must not swallow the agent's sound.
+        const slot = info.event === 'command' || info.event === 'task' ? 'local' : info.event || 'local';
+        if (Date.now() - (lastAnnounceAt.get(slot) || 0) < MIN_REPLAY_MS) {
+            return;
         }
+        lastAnnounceAt.set(slot, Date.now());
     }
 
     const globalMode = config().get('announceMode', 'sound');
@@ -489,7 +567,6 @@ async function announce(info = {}, { force = false } = {}) {
         return;
     }
 
-    lastAnnounceAt = Date.now();
     stopPlayback();
 
     if (!nativeOwnsSound && (!text || mode === 'both')) {

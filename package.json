@@ -45,7 +45,7 @@
       },
       {
         "command": "cursor-sound-toggle.installHook",
-        "title": "Install Cursor Stop Hook",
+        "title": "Install Cursor Hooks",
         "category": "Cursor Sound"
       },
       {
@@ -121,12 +121,16 @@
         "cursorSoundToggle.events": {
           "type": "object",
           "default": {},
-          "markdownDescription": "Per-event overrides, keyed by `event.status` (e.g. `command.failed`) or just `event` (`agent`, `command`, `task`, or any `event=` your hook sends). Each value may set `sound` (file path), `text` (spoken template), `mode` (`sound`/`speech`/`both`) or `enabled: false` to silence that event. Preview with **Cursor Sound: Test Event Announcement…**.",
+          "markdownDescription": "Per-event overrides, keyed by `event.status` (checked first, e.g. `agent.failed`) or just `event`. Events: `agent` (statuses `succeeded`, `failed`, `aborted`), `subagent` and `tool` (tool call failed; both stay silent until listed here), `command`, `task`, or any `event=` your hook sends. Each value may set `sound` (file path), `text` (spoken template), `mode` (`sound`/`speech`/`both`) or `enabled: false` to silence that event. Preview with **Cursor Sound: Test Event Announcement…**.",
           "examples": [
             {
               "command.failed": { "sound": "/System/Library/Sounds/Basso.aiff", "text": "{workspace}: command failed" },
               "command.succeeded": { "enabled": false },
-              "agent": { "text": "Agent finished {duration}" }
+              "agent.succeeded": { "sound": "/System/Library/Sounds/Hero.aiff" },
+              "agent.failed": { "sound": "/System/Library/Sounds/Sosumi.aiff" },
+              "agent.aborted": { "enabled": false },
+              "subagent.succeeded": { "sound": "/System/Library/Sounds/Pop.aiff" },
+              "tool.failed": { "sound": "/System/Library/Sounds/Basso.aiff" }
             }
           ],
           "additionalProperties": {

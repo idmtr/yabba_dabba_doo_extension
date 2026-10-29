@@ -11,6 +11,8 @@
 - Add **Install Cursor Stop Hook** command: merges the hook into `~/.cursor/hooks.json` without touching other hooks, and is offered when enabling `replaceNativeChime`.
 - Fix: the chosen sound now also reaches Cursor's built-in chime. Changing `soundFile` mirrors it into `cursor.composer.customChimeSoundPath` (cleared on reset; missing files are ignored).
 - Fix: no more double sound when the hook is installed and Cursor's chime is on. With `replaceNativeChime` off, agent-done is played by Cursor's chime only (the extension stays silent for it, speech still works); with it on, only the extension plays. The status bar tooltip now shows the sound of whichever player is active.
+- Add sounds per agent outcome: **Install Cursor Hooks** (renamed from *Install Cursor Stop Hook*) now also installs `subagentStop` and `postToolUseFailure` and a helper script that reads the hook status. New event keys `agent.succeeded` / `agent.failed` / `agent.aborted`, `subagent.*` and `tool.failed`; the last two stay silent until set in `events`. Re-running the command upgrades an existing hook in place.
+- Fix: announcements are debounced per source, so a sub-agent finishing right before the agent no longer swallows the agent's sound.
 - Requires VS Code 1.93+ (terminal shell integration events).
 
 ## 0.3.0

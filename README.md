@@ -17,7 +17,7 @@ Changing the sound (**Choose Done Sound…** or editing `cursorSoundToggle.sound
 
 The sound only fires when something calls it. Pick any of these:
 
-- **Cursor agent `stop` hook** (recommended): run **Cursor Sound: Install Cursor Stop Hook**. It merges the entry below into `~/.cursor/hooks.json`, keeps your other hooks, is safe to run twice, and leaves a file it cannot parse untouched. Or add it by hand:
+- **Cursor agent hooks** (recommended): run **Cursor Sound: Install Cursor Hooks**. It adds `stop` (agent done), `subagentStop` and `postToolUseFailure` to `~/.cursor/hooks.json`, plus a small helper script `~/.cursor/cursor-sound-toggle-hook.sh` that reads Cursor's JSON to tell completed, error and aborted apart. It keeps your other hooks, upgrades its own entries in place when run again (never duplicates), and leaves a file it cannot parse untouched. Sub-agent and tool-failure sounds stay silent until you list them in `cursorSoundToggle.events` (see below). `AskQuestion` ("needs input") fires no Cursor hook at all, so it cannot get a sound. Or add the basic `stop` hook by hand:
 
   ```json
   {
@@ -30,7 +30,7 @@ The sound only fires when something calls it. Pick any of these:
   }
   ```
 
-  `open -g` is macOS and keeps Cursor in the background (the installer uses `xdg-open` on Linux and `start` on Windows, untested there). Optional query params: `status` and `duration` (seconds).
+  `open -g` is macOS and keeps Cursor in the background (the installer uses `xdg-open` on Linux and `start` on Windows, untested there; on Windows there is no status detection). Optional query params: `status` and `duration` (seconds).
 - **Terminal commands**: enable `cursorSoundToggle.triggers.terminalCommands`.
 - **Tasks**: enable `cursorSoundToggle.triggers.tasks`.
 - **Keybinding / command**: `cursor-sound-toggle.play`.
@@ -52,13 +52,17 @@ Set `cursorSoundToggle.announceMode` to `speech` or `both` and write `cursorSoun
 
 ## Per-event sounds and phrases
 
-`cursorSoundToggle.events` overrides the sound, text or mode per event. Keys are `event.status` (checked first) or `event`. Built-in events are `agent` (from the hook URI), `command` and `task`, with statuses `succeeded`, `failed` or `finished`. Your hook can send any `event=` name, for example `event=input` for "needs input".
+`cursorSoundToggle.events` overrides the sound, text or mode per event. Keys are `event.status` (checked first) or `event`. Built-in events: `agent` (statuses `succeeded`, `failed`, `aborted`), `subagent` (same statuses, silent until configured), `tool` (a tool call failed, status `failed`, silent until configured, not fired for user cancels), `command` and `task` (`succeeded`, `failed` or `finished`). Per-event sounds for the agent need `replaceNativeChime` on. Your hook can send any `event=` name, for example `event=input` for "needs input".
 
 ```json
 "cursorSoundToggle.events": {
   "command.failed": { "sound": "/System/Library/Sounds/Basso.aiff", "text": "{workspace}: command failed" },
   "command.succeeded": { "enabled": false },
-  "agent": { "text": "Agent finished {duration}" }
+  "agent.succeeded": { "sound": "/System/Library/Sounds/Hero.aiff" },
+  "agent.failed": { "sound": "/System/Library/Sounds/Sosumi.aiff" },
+  "agent.aborted": { "enabled": false },
+  "subagent.succeeded": { "sound": "/System/Library/Sounds/Pop.aiff" },
+  "tool.failed": { "sound": "/System/Library/Sounds/Basso.aiff" }
 }
 ```
 
@@ -84,7 +88,7 @@ Both mute Cursor's native chime too, and the status bar shows `quiet until HH:MM
 | Cursor Sound: Choose Done Sound… | `cursor-sound-toggle.chooseSound` |
 | Cursor Sound: Play Done Sound (if enabled) | `cursor-sound-toggle.play` |
 | Cursor Sound: Test Done Sound | `cursor-sound-toggle.test` |
-| Cursor Sound: Install Cursor Stop Hook | `cursor-sound-toggle.installHook` |
+| Cursor Sound: Install Cursor Hooks | `cursor-sound-toggle.installHook` |
 | Cursor Sound: Snooze Done Sound… | `cursor-sound-toggle.snooze` |
 | Cursor Sound: Test Event Announcement… | `cursor-sound-toggle.testEvent` |
 
