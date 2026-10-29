@@ -2,18 +2,23 @@
   "name": "cursor-sound-toggle",
   "displayName": "Cursor Sound Toggle",
   "description": "Status bar toggle, sound picker with live preview, and a command to play a sound when a task is done.",
-  "version": "0.2.1",
+  "version": "0.3.0",
+  "icon": "ydd_logo.png",
   "publisher": "idmtr",
   "license": "MIT",
   "keywords": ["sound", "notification", "task done", "status bar", "cursor"],
   "engines": {
-    "vscode": "^1.90.0"
+    "vscode": "^1.93.0"
   },
+  "extensionKind": [
+    "ui"
+  ],
   "categories": [
     "Other"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onUri"
   ],
   "main": "./extension.js",
   "contributes": {
@@ -36,6 +41,21 @@
       {
         "command": "cursor-sound-toggle.test",
         "title": "Test Done Sound",
+        "category": "Cursor Sound"
+      },
+      {
+        "command": "cursor-sound-toggle.installHook",
+        "title": "Install Cursor Stop Hook",
+        "category": "Cursor Sound"
+      },
+      {
+        "command": "cursor-sound-toggle.snooze",
+        "title": "Snooze Done Sound…",
+        "category": "Cursor Sound"
+      },
+      {
+        "command": "cursor-sound-toggle.testEvent",
+        "title": "Test Event Announcement…",
         "category": "Cursor Sound"
       }
     ],
@@ -62,7 +82,80 @@
         "cursorSoundToggle.soundFile": {
           "type": "string",
           "default": "",
+          "scope": "machine",
           "markdownDescription": "Absolute path to the sound to play. Leave empty for the platform default. Easiest to set with **Cursor Sound: Choose Done Sound…**."
+        },
+        "cursorSoundToggle.replaceNativeChime": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "markdownDescription": "**Which player makes the agent-done sound?** Off (default): Cursor's built-in chime plays (its sound is `cursor.composer.customChimeSoundPath`) and this extension stays silent for agent-done, so you only ever hear one sound. On: Cursor's chime is kept off and this extension plays **Sound File** instead (needs the Cursor `stop` hook, see README). Also required for per-event sounds and the duration/focus filters on agent-done. The ON/OFF toggle, snooze and quiet hours control whichever player is active."
+        },
+        "cursorSoundToggle.announceMode": {
+          "type": "string",
+          "enum": ["sound", "speech", "both"],
+          "default": "sound",
+          "markdownDescription": "What to play on completion. `speech` and `both` use **Announce Text** and fall back to the sound if it is empty."
+        },
+        "cursorSoundToggle.announceText": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Text spoken on completion, e.g. `{workspace} on {branch} is {status} {duration}`. Variables: `{workspace}`, `{branch}`, `{duration}` (empty if unknown), `{event}` (agent, command, task), `{status}` (finished, succeeded, failed). Can be set per workspace."
+        },
+        "cursorSoundToggle.minDurationSeconds": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "markdownDescription": "Stay silent for tasks shorter than this many seconds. Only applies when the duration is known (terminal commands, tasks, or a `duration` passed to the URI trigger)."
+        },
+        "cursorSoundToggle.onlyWhenUnfocused": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Only announce when the Cursor window is not focused."
+        },
+        "cursorSoundToggle.triggers.terminalCommands": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Announce when a terminal command finishes (needs shell integration). Combine with **Min Duration Seconds** to ignore quick commands."
+        },
+        "cursorSoundToggle.events": {
+          "type": "object",
+          "default": {},
+          "markdownDescription": "Per-event overrides, keyed by `event.status` (e.g. `command.failed`) or just `event` (`agent`, `command`, `task`, or any `event=` your hook sends). Each value may set `sound` (file path), `text` (spoken template), `mode` (`sound`/`speech`/`both`) or `enabled: false` to silence that event. Preview with **Cursor Sound: Test Event Announcement…**.",
+          "examples": [
+            {
+              "command.failed": { "sound": "/System/Library/Sounds/Basso.aiff", "text": "{workspace}: command failed" },
+              "command.succeeded": { "enabled": false },
+              "agent": { "text": "Agent finished {duration}" }
+            }
+          ],
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "sound": { "type": "string" },
+              "text": { "type": "string" },
+              "mode": { "type": "string", "enum": ["sound", "speech", "both"] },
+              "enabled": { "type": "boolean" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "cursorSoundToggle.quietHours.start": {
+          "type": "string",
+          "default": "",
+          "pattern": "^$|^([01]?\\d|2[0-3]):[0-5]\\d$",
+          "markdownDescription": "Start of quiet hours as `HH:MM` (24h), e.g. `22:00`. Needs **End** too. While active, Cursor's done chime is muted and restored afterwards."
+        },
+        "cursorSoundToggle.quietHours.end": {
+          "type": "string",
+          "default": "",
+          "pattern": "^$|^([01]?\\d|2[0-3]):[0-5]\\d$",
+          "markdownDescription": "End of quiet hours as `HH:MM` (24h), e.g. `08:00`. Overnight ranges work."
+        },
+        "cursorSoundToggle.triggers.tasks": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Announce when a VS Code task finishes."
         }
       }
     }
