@@ -2,6 +2,9 @@
 
 Play a sound when a task is done, and mute it with one click.
 
+![YabaDaaDoo](ydd_logo.png)
+![YabaDaaDoo](ydd_bar.jpg)
+
 ## Features
 
 - **Status bar toggle** (bottom right): click `Sound: ON/OFF`. It switches Cursor's own agent-done chime (`cursor.composer.shouldChimeAfterChatFinishes`), so OFF really silences the agent.
