@@ -1,0 +1,12 @@
+---
+description: Play a notification sound before asking the user a question
+alwaysApply: true
+---
+
+Before every `AskQuestion` call, first run this shell command with `required_permissions: ["all"]` (it fails inside the sandbox):
+
+```
+open -g 'cursor://idmtr.cursor-sound-toggle/done?event=input'
+```
+
+This plays the "needs input" sound via the Cursor Sound Toggle extension. Run it once per question, right before `AskQuestion`.

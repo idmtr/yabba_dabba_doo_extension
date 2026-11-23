@@ -71,6 +71,31 @@ Set `cursorSoundToggle.announceMode` to `speech` or `both` and write `cursorSoun
 
 Each entry accepts `sound`, `text`, `mode` and `enabled`. An entry with `text` but no `mode` speaks it even when the global mode is `sound`. Preview any of them with **Cursor Sound: Test Event Announcement…**.
 
+## Sound when the agent asks a question (`AskQuestion`)
+
+Cursor fires no hook for the `AskQuestion` tool (checked: a `preToolUse` hook sees `Shell` and other tools but never `AskQuestion`), so the agent has to trigger the sound itself. The extension already handles `event=input`; you only need to set a sound and tell the agent to call it.
+
+1. Pick a sound for the `input` event in `settings.json`. Any file `afplay` can play works (mp3, wav, aiff, m4a). Optionally add `text` to speak a phrase too:
+
+   ```json
+   "cursorSoundToggle.events": {
+     "input": { "sound": "/System/Library/Sounds/Glass.aiff" }
+   }
+   ```
+
+   Without this entry, `input` uses your normal `cursorSoundToggle.soundFile`. Preview it with **Cursor Sound: Test Event Announcement…** and choose `input`.
+
+2. Add a rule so the agent runs this command right before every `AskQuestion` (put it in Cursor Settings → Rules → User Rules for all projects, or in `.cursor/rules/` for one repo):
+
+   ```
+   Before every AskQuestion call, first run this shell command with required_permissions ["all"]:
+   open -g 'cursor://idmtr.cursor-sound-toggle/done?event=input'
+   ```
+
+   It needs to run outside the agent sandbox, otherwise macOS answers with `kLSExecutableIncorrectFormat` and nothing plays. This repo ships that rule in `.cursor/rules/ask-question-sound.mdc`. On Linux use `xdg-open`, on Windows `start` (untested).
+
+It only works if the model follows the rule, and each question costs one extra shell call.
+
 ## Quiet hours and snooze
 
 - **Snooze Done Sound…** (also in the status bar tooltip): mute for 15 minutes to 2 hours, then it restores itself.
