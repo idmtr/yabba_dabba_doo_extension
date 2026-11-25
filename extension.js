@@ -155,6 +155,7 @@ function activate(context) {
         }),
 
         vscode.commands.registerCommand('cursor-sound-toggle.installHook', () => installHook(context)),
+        vscode.commands.registerCommand('cursor-sound-toggle.installAskRule', () => installAskRule(context)),
         vscode.commands.registerCommand('cursor-sound-toggle.snooze', snooze),
         vscode.commands.registerCommand('cursor-sound-toggle.testEvent', testEvent),
 
@@ -346,6 +347,64 @@ async function installHook(context) {
         'Cursor Sound Toggle: hooks installed (agent done, sub-agent done, tool failed). Sub-agent and tool sounds stay silent ' +
             'until you add them to cursorSoundToggle.events. Cursor reloads hooks.json on save; restart Cursor if it does not fire.'
     );
+}
+
+// --- Ask-question sound rule -----------------------------------------------------------
+
+const ASK_RULE_FILE = 'ask-question-sound.mdc';
+
+/** Cursor fires no hook for `AskQuestion`, so a rule makes the agent play the sound itself. */
+function askRuleText(context) {
+    const opener = process.platform === 'win32' ? 'cmd /c start ""' : process.platform === 'darwin' ? 'open -g' : 'xdg-open';
+    const quote = process.platform === 'win32' ? '"' : "'";
+    return [
+        '---',
+        'description: Play a notification sound before asking the user a question',
+        'alwaysApply: true',
+        '---',
+        '',
+        'Before every `AskQuestion` call, first run this shell command' +
+            (process.platform === 'darwin' ? ' with `required_permissions: ["all"]` (it fails inside the sandbox)' : '') + ':',
+        '',
+        '```',
+        `${opener} ${quote}${vscode.env.uriScheme}://${context.extension.id}/done?event=input${quote}`,
+        '```',
+        '',
+        'This plays the "needs input" sound via the Cursor Sound Toggle extension. Run it once per question, right before `AskQuestion`.',
+        ''
+    ].join('\n');
+}
+
+/** Writes `.cursor/rules/ask-question-sound.mdc` into the open project; never overwrites an existing file. */
+async function installAskRule(context) {
+    const folder = (vscode.workspace.workspaceFolders || [])[0];
+    if (!folder) {
+        vscode.window.showWarningMessage('Cursor Sound Toggle: open a project folder first, the rule is saved inside it.');
+        return;
+    }
+    const file = path.join(folder.uri.fsPath, '.cursor', 'rules', ASK_RULE_FILE);
+    const OPEN = 'Open Rule';
+    if (fs.existsSync(file)) {
+        vscode.window
+            .showInformationMessage('Cursor Sound Toggle: this project already has the ask-question sound rule.', OPEN)
+            .then((choice) => choice && vscode.window.showTextDocument(vscode.Uri.file(file)));
+        return;
+    }
+    try {
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, askRuleText(context));
+    } catch (err) {
+        log(`Could not write ${file}: ${err.message}`);
+        vscode.window.showErrorMessage(`Cursor Sound Toggle: could not write the rule (${err.message}).`);
+        return;
+    }
+    log(`Installed ask-question rule at ${file}`);
+    vscode.window
+        .showInformationMessage(
+            'Cursor Sound Toggle: rule added. The agent now plays a sound before asking you a question in this project.',
+            OPEN
+        )
+        .then((choice) => choice && vscode.window.showTextDocument(vscode.Uri.file(file)));
 }
 
 // --- Quiet hours & snooze --------------------------------------------------------------

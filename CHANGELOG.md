@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 - 2026-11-25
 - Add completion triggers: URI handler (`cursor://idmtr.cursor-sound-toggle/done`) for Cursor `stop` hooks, terminal command end, and task end.
 - Add spoken announcements with a templated text (`announceMode`, `announceText`).
 - Add `minDurationSeconds` and `onlyWhenUnfocused` filters; `play` now honors them.
@@ -14,6 +14,7 @@
 - Add sounds per agent outcome: **Install Cursor Hooks** (renamed from *Install Cursor Stop Hook*) now also installs `subagentStop` and `postToolUseFailure` and a helper script that reads the hook status. New event keys `agent.succeeded` / `agent.failed` / `agent.aborted`, `subagent.*` and `tool.failed`; the last two stay silent until set in `events`. Re-running the command upgrades an existing hook in place.
 - Fix: announcements are debounced per source, so a sub-agent finishing right before the agent no longer swallows the agent's sound.
 - Fix: a sound in a macOS-protected folder (Downloads, Desktop, Documents) no longer fails with `AudioFileOpen failed (-54)`. Files picked with **Choose Done Sound… > Browse** are now copied into the extension's own storage, so they keep working wherever the original is. An unreadable or missing file plays the default sound instead and shows a one-click **Pick the Sound Again** / **Privacy Settings** message (once per file per session).
+- Add **Install Ask-Question Sound Rule**: one click writes `.cursor/rules/ask-question-sound.mdc` into the open project so the agent plays the `event=input` sound before each `AskQuestion` (Cursor has no hook for that tool). Never overwrites an existing file. Documented in the README.
 - Requires VS Code 1.93+ (terminal shell integration events).
 
 ## 0.3.0

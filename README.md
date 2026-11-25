@@ -89,7 +89,7 @@ Cursor fires no hook for the `AskQuestion` tool (checked: a `preToolUse` hook se
 
    Without this entry, `input` uses your normal `cursorSoundToggle.soundFile`. Preview it with **Cursor Sound: Test Event Announcement…** and choose `input`.
 
-2. Add a rule so the agent runs this command right before every `AskQuestion` (put it in Cursor Settings → Rules → User Rules for all projects, or in `.cursor/rules/` for one repo):
+2. Add a rule so the agent runs this command right before every `AskQuestion`. For one project, run **Cursor Sound: Install Ask-Question Sound Rule**: it writes `.cursor/rules/ask-question-sound.mdc` into the open folder (an existing file is never overwritten). For all projects, paste the text below into Cursor Settings → Rules → User Rules:
 
    ```
    Before every AskQuestion call, first run this shell command with required_permissions ["all"]:
@@ -121,6 +121,7 @@ Both mute Cursor's native chime too, and the status bar shows `quiet until HH:MM
 | Cursor Sound: Play Done Sound (if enabled) | `cursor-sound-toggle.play` |
 | Cursor Sound: Test Done Sound | `cursor-sound-toggle.test` |
 | Cursor Sound: Install Cursor Hooks | `cursor-sound-toggle.installHook` |
+| Cursor Sound: Install Ask-Question Sound Rule | `cursor-sound-toggle.installAskRule` |
 | Cursor Sound: Snooze Done Sound… | `cursor-sound-toggle.snooze` |
 | Cursor Sound: Test Event Announcement… | `cursor-sound-toggle.testEvent` |
 

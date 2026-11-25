@@ -2,7 +2,7 @@
   "name": "cursor-sound-toggle",
   "displayName": "Cursor Sound Toggle",
   "description": "Status bar toggle, sound picker with live preview, and a command to play a sound when a task is done.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "icon": "ydd_logo.png",
   "publisher": "idmtr",
   "license": "MIT",
@@ -46,6 +46,11 @@
       {
         "command": "cursor-sound-toggle.installHook",
         "title": "Install Cursor Hooks",
+        "category": "Cursor Sound"
+      },
+      {
+        "command": "cursor-sound-toggle.installAskRule",
+        "title": "Install Ask-Question Sound Rule",
         "category": "Cursor Sound"
       },
       {
