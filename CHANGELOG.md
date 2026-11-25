@@ -13,6 +13,7 @@
 - Fix: no more double sound when the hook is installed and Cursor's chime is on. With `replaceNativeChime` off, agent-done is played by Cursor's chime only (the extension stays silent for it, speech still works); with it on, only the extension plays. The status bar tooltip now shows the sound of whichever player is active.
 - Add sounds per agent outcome: **Install Cursor Hooks** (renamed from *Install Cursor Stop Hook*) now also installs `subagentStop` and `postToolUseFailure` and a helper script that reads the hook status. New event keys `agent.succeeded` / `agent.failed` / `agent.aborted`, `subagent.*` and `tool.failed`; the last two stay silent until set in `events`. Re-running the command upgrades an existing hook in place.
 - Fix: announcements are debounced per source, so a sub-agent finishing right before the agent no longer swallows the agent's sound.
+- Fix: a sound in a macOS-protected folder (Downloads, Desktop, Documents) no longer fails with `AudioFileOpen failed (-54)`. Files picked with **Choose Done Sound… > Browse** are now copied into the extension's own storage, so they keep working wherever the original is. An unreadable or missing file plays the default sound instead and shows a one-click **Pick the Sound Again** / **Privacy Settings** message (once per file per session).
 - Requires VS Code 1.93+ (terminal shell integration events).
 
 ## 0.3.0

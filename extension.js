@@ -24,6 +24,12 @@ const DEFAULT_SOUND = {
     linux: '/usr/share/sounds/freedesktop/stereo/complete.oga'
 };
 
+// Picked sound files are copied here (inside the extension's own storage, which is never
+// privacy-protected) so they keep working even if the original sits in ~/Downloads, ~/Desktop, etc.
+const SOUND_STORE_DIR = 'sounds';
+const MAX_IMPORT_BYTES = 25 * 1024 * 1024;
+const MACOS_FILES_PRIVACY_URL = 'x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders';
+
 const MAX_SPEECH_CHARS = 200;
 const SAFE_WORD = /^[\w -]{1,30}$/; // for event/status values arriving via URI
 
@@ -45,6 +51,7 @@ let lastPlayedAt = 0;
 const lastAnnounceAt = new Map(); // debounce slot -> epoch ms
 let currentPlayback;
 let output;
+const warnedUnreadable = new Set(); // sound files we already told the user about (once per session)
 
 function config() {
     return vscode.workspace.getConfiguration('cursorSoundToggle');
@@ -723,14 +730,7 @@ function chooseSound() {
         } else if (item.action === 'reset') {
             await saveSound('');
         } else if (item.action === 'browse') {
-            const [uri] = (await vscode.window.showOpenDialog({
-                canSelectMany: false,
-                title: 'Select a sound file',
-                filters: { Audio: ['aiff', 'aif', 'wav', 'mp3', 'm4a', 'oga', 'ogg', 'flac'] }
-            })) || [];
-            if (uri) {
-                await saveSound(uri.fsPath);
-            }
+            await browseForSound();
         }
     });
 
@@ -743,8 +743,109 @@ function chooseSound() {
 }
 
 async function saveSound(filePath) {
+    warnedUnreadable.delete(filePath);
     await config().update('soundFile', filePath || undefined, vscode.ConfigurationTarget.Global);
+    pruneSoundStore(filePath);
     playSound(resolveSoundFile(), { force: true, interrupt: true });
+}
+
+/** File dialog; the pick is imported into extension storage so it can't be blocked later. */
+async function browseForSound(startFile) {
+    const [uri] = (await vscode.window.showOpenDialog({
+        canSelectMany: false,
+        title: 'Select a sound file',
+        defaultUri: startFile ? vscode.Uri.file(path.dirname(startFile)) : undefined,
+        filters: { Audio: ['aiff', 'aif', 'wav', 'mp3', 'm4a', 'oga', 'ogg', 'flac'] }
+    })) || [];
+    if (uri) {
+        await saveSound(importSound(uri.fsPath));
+    }
+}
+
+function soundStorePath() {
+    return path.join(extContext.globalStorageUri.fsPath, SOUND_STORE_DIR);
+}
+
+/**
+ * Copies a picked sound into extension storage and returns the copy's path. Falls back to the
+ * original path if the copy is not possible (too big, unreadable), so a pick is never lost.
+ */
+function importSound(file) {
+    try {
+        const dest = path.join(soundStorePath(), path.basename(file));
+        if (path.resolve(file) === path.resolve(dest)) {
+            return file;
+        }
+        if (fs.statSync(file).size > MAX_IMPORT_BYTES) {
+            return file;
+        }
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        fs.copyFileSync(file, dest);
+        log(`Imported ${file} -> ${dest}`);
+        return dest;
+    } catch (err) {
+        log(`Could not import ${file}, using it in place: ${err.message}`);
+        return file;
+    }
+}
+
+/** Deletes imported sounds other than the one in use, so the store never grows. */
+function pruneSoundStore(keep) {
+    try {
+        const dir = soundStorePath();
+        for (const name of fs.readdirSync(dir)) {
+            const file = path.join(dir, name);
+            if (path.resolve(file) !== path.resolve(keep || '')) {
+                fs.rmSync(file, { force: true });
+            }
+        }
+    } catch {
+        // store does not exist yet: nothing to prune
+    }
+}
+
+/** 'blocked' when the OS denies reading the file (macOS privacy), 'missing', or '' when readable. */
+function unreadableReason(file) {
+    try {
+        fs.closeSync(fs.openSync(file, 'r'));
+        return '';
+    } catch (err) {
+        return err.code === 'EPERM' || err.code === 'EACCES' ? 'blocked' : 'missing';
+    }
+}
+
+/**
+ * Returns `file` if it can be played, otherwise the platform default so the user still hears
+ * something, and (once per file per session) offers a one-click fix.
+ */
+function playableSound(file) {
+    const reason = unreadableReason(file);
+    if (!reason) {
+        return file;
+    }
+    log(`Cannot read ${file} (${reason}); playing the default sound instead.`);
+    if (!warnedUnreadable.has(file)) {
+        warnedUnreadable.add(file);
+        const name = path.basename(file);
+        const macos = process.platform === 'darwin';
+        const actions = ['Pick the Sound Again', ...(macos && reason === 'blocked' ? ['Privacy Settings'] : [])];
+        vscode.window
+            .showWarningMessage(
+                reason === 'blocked'
+                    ? `Cursor Sound Toggle: ${macos ? 'macOS' : 'the system'} blocked access to "${name}" (protected folder such as Downloads). Playing the default sound instead. Re-pick the file to fix it for good.`
+                    : `Cursor Sound Toggle: "${name}" was not found. Playing the default sound instead.`,
+                ...actions
+            )
+            .then((choice) => {
+                if (choice === 'Pick the Sound Again') {
+                    return browseForSound(file);
+                }
+                if (choice === 'Privacy Settings') {
+                    return vscode.env.openExternal(vscode.Uri.parse(MACOS_FILES_PRIVACY_URL));
+                }
+            });
+    }
+    return DEFAULT_SOUND[process.platform] || DEFAULT_SOUND.linux;
 }
 
 /**
@@ -819,7 +920,7 @@ function playSound(file, { force = false, interrupt = false } = {}) {
         stopPlayback();
     }
 
-    return runFirstAvailable(buildPlayers(file)).catch(reportPlaybackError);
+    return runFirstAvailable(buildPlayers(playableSound(file))).catch(reportPlaybackError);
 }
 
 function reportPlaybackError(err) {

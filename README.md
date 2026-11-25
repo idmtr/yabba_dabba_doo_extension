@@ -12,6 +12,10 @@ Play a sound when a task is done, and mute it with one click.
 - **Test Done Sound**: preview the current sound, even while muted.
 - **Play Done Sound (if enabled)**: `cursor-sound-toggle.play`, for keybindings, tasks or automations to call when work finishes.
 
+## Sound files and macOS privacy
+
+Files you pick with **Choose Done Sound… > Browse** are copied into the extension's own storage, so they keep playing even if the original is in `~/Downloads`, `~/Desktop` or `~/Documents` (macOS blocks apps from reading those without permission, which shows up as `AudioFileOpen failed (-54)`). If a sound set by hand in `soundFile` cannot be read, the default sound plays instead and a message offers **Pick the Sound Again** (re-imports it) or **Privacy Settings**.
+
 ## Sound for Cursor's own chime
 
 Changing the sound (**Choose Done Sound…** or editing `cursorSoundToggle.soundFile`) also writes it to Cursor's `cursor.composer.customChimeSoundPath`, so Cursor's built-in agent-done chime plays the same sound, with no hook needed. Resetting to default clears it. A path that does not exist is ignored. Which audio formats the built-in chime accepts is up to Cursor. The hook below is only needed for speech, per-event sounds and the filters, and per-event sounds and filters only apply with `replaceNativeChime` on. If you set `customChimeSoundPath` by hand it is kept until you change `soundFile` again.
